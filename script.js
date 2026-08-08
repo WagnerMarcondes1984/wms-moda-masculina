@@ -1,4 +1,18 @@
-document.addEventListener("DOMContentLoaded", () => {
+// ─── FIREBASE CONFIG ──────────────────────────────────────────────────────────
+// TODO: preencher com as credenciais do Firebase deste projeto
+const firebaseConfig = {
+  apiKey: "",
+  authDomain: "",
+  projectId: "",
+  storageBucket: "",
+  messagingSenderId: "",
+  appId: ""
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+// ─────────────────────────────────────────────────────────────────────────────
+
+document.addEventListener("DOMContentLoaded", async () => {
     // --- SELETORES GLOBAIS ---
     const cartIcon = document.querySelector(".cart-icon"),
         cartSidebar = document.querySelector(".cart-sidebar"),
@@ -27,69 +41,95 @@ document.addEventListener("DOMContentLoaded", () => {
     const categoryBtns = document.querySelectorAll(".category-btn");
     const searchInput = document.querySelector(".search-input");
 
+    // --- CARREGAR PRODUTOS DO FIREBASE ---
+    let produtos = [];
+    try {
+        const snap = await db.collection("produtos")
+            .where("ativo", "!=", false)
+            .get();
+        produtos = snap.docs.map(d => ({ ...d.data() }));
+    } catch (e) {
+        console.error("Erro ao carregar produtos do Firebase:", e);
+    }
+
+    // --- CARREGAR CUPONS DO FIREBASE ---
+    let coupons = [];
+    try {
+        const cuponsSnap = await db.collection("cupons").get();
+        coupons = cuponsSnap.docs.map((d) => ({ docId: d.id, ...d.data() }));
+    } catch (e) {
+        console.error("Erro ao carregar cupons do Firebase:", e);
+    }
+
+    // --- CARREGAR CONFIGURAÇÕES DA LOJA DO FIREBASE ---
+    const CONFIG_PADRAO = {
+        nomeLoja: "RA Moda Masculina",
+        whatsapp: "558182362638",
+        retiradaDias: [0, 1, 2, 3, 4, 5, 6],
+        retiradaHoraInicio: "08:00",
+        retiradaHoraFim: "18:00",
+        retiradaIntervalo: 60,
+        bannerUrl: "",
+        corPrimaria: "#0EA5A6",
+        corSecundaria: "#0F172A",
+        corDestaque: "#C5A049",
+    };
+    let configLoja = { ...CONFIG_PADRAO };
+    try {
+        const configDoc = await db.collection("configuracoes").doc("geral").get();
+        if (configDoc.exists) configLoja = { ...CONFIG_PADRAO, ...configDoc.data() };
+    } catch (e) {
+        console.error("Erro ao carregar configurações da loja:", e);
+    }
+
+    const aplicarConfiguracoesDaLoja = () => {
+        document.title = configLoja.nomeLoja;
+
+        const headerEl = document.querySelector("header");
+        if (headerEl && configLoja.bannerUrl) {
+            headerEl.style.backgroundImage = `url("${configLoja.bannerUrl}")`;
+            headerEl.classList.add("header--banner");
+        }
+
+        const root = document.documentElement;
+        if (configLoja.corPrimaria) root.style.setProperty("--primary-color", configLoja.corPrimaria);
+        if (configLoja.corSecundaria) root.style.setProperty("--secondary-color", configLoja.corSecundaria);
+        if (configLoja.corDestaque) root.style.setProperty("--accent-color", configLoja.corDestaque);
+
+        const logoTitleEl = document.querySelector(".logo h1");
+        if (logoTitleEl) logoTitleEl.textContent = configLoja.nomeLoja;
+
+        const footerEl = document.querySelector("footer p");
+        if (footerEl) {
+            const ano = new Date().getFullYear();
+            footerEl.textContent = `${ano} - ${configLoja.nomeLoja}. Todos os direitos reservados`;
+        }
+
+        const pickupDateInput = document.getElementById("pickup-date");
+        if (pickupDateInput) {
+            const hoje = new Date();
+            pickupDateInput.min = hoje.toISOString().split("T")[0];
+        }
+
+        const pickupTimeSelect = document.getElementById("pickup-time");
+        if (pickupTimeSelect) {
+            const [hIni, mIni] = configLoja.retiradaHoraInicio.split(":").map(Number);
+            const [hFim, mFim] = configLoja.retiradaHoraFim.split(":").map(Number);
+            const inicioMin = hIni * 60 + mIni;
+            const fimMin = hFim * 60 + mFim;
+            const passo = configLoja.retiradaIntervalo || 60;
+            let opcoes = `<option value="" disabled selected>Selecione</option>`;
+            for (let m = inicioMin; m <= fimMin; m += passo) {
+                const h = String(Math.floor(m / 60)).padStart(2, "0");
+                const min = String(m % 60).padStart(2, "0");
+                opcoes += `<option value="${h}:${min}">${h}:${min}</option>`;
+            }
+            pickupTimeSelect.innerHTML = opcoes;
+        }
+    };
+    aplicarConfiguracoesDaLoja();
+
     // --- ESTADO DA APLICAÇÃO ---
-    const produtos = [
-        {
-            id: 1,
-            nome: "Camiseta Polo Levi's",
-            categoria: "blusas",
-            preco: 59.00,
-            imagem:
-                "./assets/masculina-blusa.jpeg",
-            descricao: "Camiseta Masculina Levi's Gola Polo Azul Marinho",
-
-        },
-        {
-            id: 2,
-            nome: "Camiseta Soldier Preta",
-            categoria: "blusas",
-            preco: 90.00,
-            imagem:
-                "./assets/masculina-blusa2.jpeg",
-            descricao: "Camiseta Masculina Soldier Preta Bélica ",
-        },
-        {
-            id: 3,
-            nome: "Calça Jeans",
-            categoria: "calças",
-            preco: 150.00,
-            imagem:
-                "./assets/calça-masculina1.jpeg",
-            descricao: "Calça Masculina Jeans Junior Confort Rasgada",
-        },
-        {
-            id: 4,
-            nome: "Shorts Masculino",
-            categoria: "shorts",
-            preco: 30.00,
-            imagem:
-                "./assets/shots-masculino.jpeg",
-            descricao: "Shorts Masculino Confortável e Estiloso",
-        },
-       
-        {
-            id: 5,
-            nome: "Relógio Dourado",
-            categoria: "acessórios",
-            preco: 99.99,
-            imagem:
-                "./assets/relogio-masculino.jpeg",
-            descricao: "Relógio Dourado Masculino Mondaine",
-        },
-
-        {
-            id: 6,
-            nome: "Sapato Casual",
-            categoria: "calçados",
-            preco: 99.99,
-            imagem:
-                "./assets/sapato-masculino.jpeg",
-            descricao: "Sapato Masculino Casual Castelli Marinho",
-        },
-
-   
-    ];
-    const validCoupons = [{ code: "DESCONTO10", type: "percentage", value: 10 }];
     let carrinho = [],
         tipoEntrega = "delivery",
         appliedCoupon = null;
@@ -160,7 +200,7 @@ document.addEventListener("DOMContentLoaded", () => {
             produtosFiltrados = produtosFiltrados.filter(
                 (produto) =>
                     produto.nome.toLowerCase().includes(termo) ||
-                    produto.descricao.toLowerCase().includes(termo),
+                    (produto.descricao || "").toLowerCase().includes(termo),
             );
         }
 
@@ -194,8 +234,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const adicionarAoCarrinho = (produtoId, productCard) => {
         if (productCard) animacaoVoarParaCarrinho(productCard);
-        const produto = produtos.find((p) => p.id === produtoId),
-            itemNoCarrinho = carrinho.find((item) => item.id === produtoId);
+        const produto = produtos.find((p) => p.id === produtoId);
+        if (!produto) return;
+
+        const itemNoCarrinho = carrinho.find((item) => item.id === produtoId);
         if (itemNoCarrinho) itemNoCarrinho.quantidade++;
         else carrinho.push({ ...produto, quantidade: 1 });
         atualizarCarrinho();
@@ -220,7 +262,19 @@ document.addEventListener("DOMContentLoaded", () => {
             cartBody.innerHTML = carrinho
                 .map(
                     (item) =>
-                        `<div class="cart-item" data-id="${item.id}"><img src="${item.imagem}" alt="${item.nome}" class="cart-item-img"><div class="cart-item-info"><h4 class="cart-item-name">${item.nome}</h4><p class="cart-item-price">${formatarMoeda(item.preco)}</p><div class="cart-item-controls"><button class="quantity-btn" data-action="diminuir">-</button><span class="quantity">${item.quantidade}</span><button class="quantity-btn" data-action="aumentar">+</button></div></div><button class="remove-item-btn">&times;</button></div>`,
+                        `<div class="cart-item" data-id="${item.id}">
+                            <img src="${item.imagem}" alt="${item.nome}" class="cart-item-img">
+                            <div class="cart-item-info">
+                                <h4 class="cart-item-name">${item.nome}</h4>
+                                <p class="cart-item-price">${formatarMoeda(item.preco)}</p>
+                                <div class="cart-item-controls">
+                                    <button class="quantity-btn" data-action="diminuir">-</button>
+                                    <span class="quantity">${item.quantidade}</span>
+                                    <button class="quantity-btn" data-action="aumentar">+</button>
+                                </div>
+                            </div>
+                            <button class="remove-item-btn">&times;</button>
+                        </div>`,
                 )
                 .join("");
         }
@@ -228,9 +282,20 @@ document.addEventListener("DOMContentLoaded", () => {
             (acc, item) => acc + item.preco * item.quantidade,
             0,
         );
-        let discountAmount = 0;
-        if (appliedCoupon && appliedCoupon.type === "percentage")
-            discountAmount = subtotal * (appliedCoupon.value / 100);
+
+        if (
+            appliedCoupon &&
+            appliedCoupon.valorMinimo &&
+            subtotal < appliedCoupon.valorMinimo
+        ) {
+            appliedCoupon = null;
+            couponFeedback.textContent =
+                "Cupom removido: o pedido não atinge mais o valor mínimo exigido.";
+            couponFeedback.classList.remove("success");
+            couponFeedback.classList.add("error");
+        }
+
+        const discountAmount = calcularDesconto(subtotal);
         const total = subtotal - discountAmount;
         subtotalElem.textContent = formatarMoeda(subtotal);
         if (discountAmount > 0) {
@@ -254,18 +319,50 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     };
 
+    const calcularDesconto = (subtotal) => {
+        if (!appliedCoupon) return 0;
+        if (appliedCoupon.tipo === "fixo")
+            return Math.min(appliedCoupon.valor, subtotal);
+        return subtotal * (appliedCoupon.valor / 100);
+    };
+
     const applyCoupon = () => {
-        const code = couponInput.value.trim().toUpperCase(),
-            foundCoupon = validCoupons.find((c) => c.code === code);
+        const code = couponInput.value.trim().toUpperCase();
+        const subtotal = carrinho.reduce(
+            (acc, item) => acc + item.preco * item.quantidade,
+            0,
+        );
+        const foundCoupon = coupons.find((c) => c.codigo === code);
         couponFeedback.classList.remove("success", "error");
-        if (foundCoupon) {
-            appliedCoupon = foundCoupon;
-            couponFeedback.textContent = "Cupom aplicado!";
-            couponFeedback.classList.add("success");
-        } else {
+
+        if (!foundCoupon) {
             appliedCoupon = null;
             couponFeedback.textContent = "Cupom inválido.";
             couponFeedback.classList.add("error");
+        } else if (foundCoupon.ativo === false) {
+            appliedCoupon = null;
+            couponFeedback.textContent = "Este cupom não está mais disponível.";
+            couponFeedback.classList.add("error");
+        } else if (
+            foundCoupon.validade &&
+            new Date(`${foundCoupon.validade}T23:59:59`) < new Date()
+        ) {
+            appliedCoupon = null;
+            couponFeedback.textContent = "Este cupom expirou.";
+            couponFeedback.classList.add("error");
+        } else if (
+            foundCoupon.valorMinimo &&
+            subtotal < foundCoupon.valorMinimo
+        ) {
+            appliedCoupon = null;
+            couponFeedback.textContent = `Pedido mínimo de ${formatarMoeda(
+                foundCoupon.valorMinimo,
+            )} para usar este cupom.`;
+            couponFeedback.classList.add("error");
+        } else {
+            appliedCoupon = foundCoupon;
+            couponFeedback.textContent = "Cupom aplicado!";
+            couponFeedback.classList.add("success");
         }
         atualizarCarrinho();
     };
@@ -283,6 +380,19 @@ document.addEventListener("DOMContentLoaded", () => {
             ];
         } else {
             fieldsToValidate = ["pickup-name", "pickup-date", "pickup-time"];
+        }
+
+        if (tipoEntrega === "pickup") {
+            const dataInput = document.getElementById("pickup-date");
+            if (dataInput.value) {
+                const [ano, mes, dia] = dataInput.value.split("-").map(Number);
+                const diaSemana = new Date(ano, mes - 1, dia).getDay();
+                if (!configLoja.retiradaDias.includes(diaSemana)) {
+                    dataInput.classList.add("error");
+                    alert("A loja não realiza retiradas no dia selecionado. Escolha outra data.");
+                    return;
+                }
+            }
         }
 
         fieldsToValidate.forEach((id) => {
@@ -315,7 +425,7 @@ document.addEventListener("DOMContentLoaded", () => {
             return;
         }
 
-        const numeroWhatsApp = "558182362638";
+        const numeroWhatsApp = configLoja.whatsapp;
         const itensPedido = carrinho
             .map((item) => `  - ${item.quantidade}x ${item.nome}`)
             .join("\n");
@@ -323,14 +433,19 @@ document.addEventListener("DOMContentLoaded", () => {
             (acc, item) => acc + item.preco * item.quantidade,
             0,
         );
-        let discountAmount = 0,
-            cupomInfo = "";
+        const discountAmount = calcularDesconto(subtotal);
+        let cupomInfo = "";
         if (appliedCoupon) {
-            discountAmount = subtotal * (appliedCoupon.value / 100);
-            cupomInfo = `\n*Cupom Aplicado:* ${appliedCoupon.code} (${formatarMoeda(discountAmount)})`;
+            cupomInfo = `\n*Cupom Aplicado:* ${appliedCoupon.codigo} (${formatarMoeda(
+                discountAmount,
+            )})`;
         }
         const total = subtotal - discountAmount;
-        let mensagem = `*-- NOVO PEDIDO RA Moda Masculina --*\n\n*Itens:*\n${itensPedido}\n\n*Subtotal:* ${formatarMoeda(subtotal)}${cupomInfo}\n*Total:* ${formatarMoeda(total)}\n\n-------------------------\n\n`;
+        let mensagem = `*-- NOVO PEDIDO ${configLoja.nomeLoja} --*\n\n*Itens:*\n${itensPedido}\n\n*Subtotal:* ${formatarMoeda(
+            subtotal,
+        )}${cupomInfo}\n*Total:* ${formatarMoeda(
+            total,
+        )}\n\n-------------------------\n\n`;
 
         if (tipoEntrega === "delivery") {
             const nome = document.getElementById("delivery-name").value;
