@@ -1,4 +1,4 @@
-# Regras do Firestore — RA Moda Masculina
+# Regras do Firestore — WMS Moda Masculina
 
 Copie o bloco abaixo e cole no Console do Firebase:
 

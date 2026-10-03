@@ -1,0 +1,22 @@
+.report-chart{margin:20px 0;padding:20px;background:var(--card);border:1px solid var(--border);border-radius:12px}
+.report-chart h3{margin-bottom:6px}
+.report-chart p{color:var(--muted);font-size:.85rem;margin-bottom:12px}
+.chart-container{position:relative;height:280px;min-width:0}
+.pdv-shortcuts{display:flex;flex-wrap:wrap;gap:10px;font-size:.78rem;color:var(--muted);margin:12px 0}
+.pdv-split-toggle{padding:14px;border:1px solid var(--gold);border-radius:8px;background:var(--surface);font-weight:600;align-items:flex-start!important}
+.pdv-split-toggle input{accent-color:var(--gold);width:18px;height:18px;flex-shrink:0}
+.pdv-payment-help{font-size:.8rem;color:var(--muted);line-height:1.5}
+kbd{font-family:inherit;border:1px solid var(--border);background:var(--surface);border-radius:4px;padding:2px 5px}
+#recibo-impressao{display:none}
+@media print{
+  @page{size:auto;margin:12mm}
+  body.printing-receipt{background:#fff!important;color:#000!important;min-height:0}
+  body.printing-receipt>*:not(#recibo-impressao){display:none!important}
+  body.printing-receipt #recibo-impressao{display:block!important;max-width:76mm;margin:0 auto;font:12px/1.5 monospace;color:#000}
+  #recibo-impressao h1{font-size:18px;text-align:center;margin-bottom:8px}
+  #recibo-impressao h2{font-size:15px;margin:8px 0}
+  #recibo-impressao p{margin:4px 0;overflow-wrap:anywhere}
+  #recibo-impressao hr{border:0;border-top:1px dashed #000;margin:12px 0}
+  .recibo-item-valor{text-align:right}
+  .recibo-rodape{text-align:center;padding-top:16px}
+}

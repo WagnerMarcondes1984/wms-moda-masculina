@@ -1,7 +1,10 @@
 // ─── FIREBASE CONFIG ──────────────────────────────────────────────────────────
 // firebaseConfig é carregado de ./firebase-config.js
-firebase.initializeApp(firebaseConfig);
-const db = firebase.firestore();
+let db;
+try {
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.firestore();
+} catch (erro) { console.error("Não foi possível iniciar a conexão:", erro); }
 // ─────────────────────────────────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", async () => {
     // --- SELETORES GLOBAIS ---
@@ -34,12 +37,14 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // --- CARREGAR PRODUTOS DO FIREBASE ---
     let produtos = [];
+    let erroProdutos = false;
     try {
         const snap = await db.collection("produtos")
             .where("ativo", "!=", false)
             .get();
         produtos = snap.docs.map(d => ({ ...d.data() }));
     } catch (e) {
+        erroProdutos = true;
         console.error("Erro ao carregar produtos do Firebase:", e);
     }
 
@@ -82,7 +87,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // --- CARREGAR CONFIGURAÇÕES DA LOJA DO FIREBASE ---
     const CONFIG_PADRAO = {
-        nomeLoja: "RA Moda Masculina",
+        nomeLoja: "WMS Moda Masculina",
         whatsapp: "558182362638",
         retiradaDias: [0, 1, 2, 3, 4, 5, 6],
         retiradaHoraInicio: "08:00",
@@ -147,6 +152,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     };
     aplicarConfiguracoesDaLoja();
+    window.lojaUI.configurar(configLoja);
+    window.lojaUI.registrarProdutos(produtos);
 
     // --- ESTADO DA APLICAÇÃO ---
     let carrinho = [],
@@ -202,6 +209,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         flyingImg.addEventListener("transitionend", () => flyingImg.remove());
     };
 
+    const escaparHTML = valor => String(valor ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[c]));
     // Função para filtrar e mostrar produtos
     const filtrarEMostrarProdutos = () => {
         let produtosFiltrados = produtos;
@@ -223,24 +231,38 @@ document.addEventListener("DOMContentLoaded", async () => {
             );
         }
 
+        if (window.lojaUI.somenteFavoritos()) {
+            produtosFiltrados = produtosFiltrados.filter(p => window.lojaUI.favorito(p.id));
+        }
         // Renderizar produtos filtrados
         const container = document.querySelector(".products-container");
+        container.setAttribute('aria-busy', 'false');
+        document.getElementById('catalog-status').textContent = erroProdutos ? 'Não foi possível carregar os produtos.' : `${produtosFiltrados.length} produto${produtosFiltrados.length === 1 ? '' : 's'}${window.lojaUI.somenteFavoritos() ? ' nos favoritos' : ''}`;
+        if (erroProdutos) {
+            container.innerHTML = '<div class="catalog-empty"><p>Não foi possível conectar ao catálogo.</p><button class="product-button" id="retry-catalog">Tentar novamente</button></div>';
+            document.getElementById('retry-catalog').onclick = () => location.reload();
+            return;
+        }
         if (produtosFiltrados.length === 0) {
             container.innerHTML = `
                         <div style="grid-column: 1 / -1; text-align: center; padding: 3rem; color: #999;">
                             <i class="fa-solid fa-box-open" style="font-size: 3rem; margin-bottom: 1rem;"></i>
-                            <p style="font-size: 1.2rem; font-weight: 600;">Nenhum produto encontrado</p>
+                            <p style="font-size: 1.2rem; font-weight: 600;">${window.lojaUI.somenteFavoritos() ? "Nenhum favorito encontrado. Marque o coração dos produtos que você gostar." : "Nenhum produto encontrado"}</p>
                         </div>
                     `;
         } else {
             container.innerHTML = produtosFiltrados
                 .map(
                     (p) => `
-                        <div class="product-card" data-id="${p.id}">
-                            <img class="product-img" src="${p.imagem}" alt="${p.nome}">
+                        <div class="product-card" data-id="${escaparHTML(p.id)}" id="produto-${escaparHTML(p.id)}">
+                            <img class="product-img" src="${escaparHTML(p.imagem)}" alt="${escaparHTML(p.nome)}" loading="lazy" decoding="async">
+                            <div class="product-actions">
+                                <button class="icon-action" data-favorito="${escaparHTML(p.id)}" aria-label="Adicionar aos favoritos" aria-pressed="false"><i class="fa-regular fa-heart" aria-hidden="true"></i></button>
+                                <button class="icon-action" data-compartilhar="${escaparHTML(p.id)}" aria-label="Compartilhar ${escaparHTML(p.nome)}"><i class="fa-solid fa-share-nodes" aria-hidden="true"></i></button>
+                            </div>
                             <div class="product-info">
-                                <h3 class="product-name">${p.nome}</h3>
-                                <p class="product-description">${p.descricao}</p>
+                                <h3 class="product-name">${escaparHTML(p.nome)}</h3>
+                                <p class="product-description">${escaparHTML(p.descricao)}</p>
                                 <p class="product-price">${formatarMoeda(p.preco)}</p>
                                 <button class="product-button">Comprar</button>
                             </div>
@@ -249,8 +271,10 @@ document.addEventListener("DOMContentLoaded", async () => {
                 )
                 .join("");
         }
+        window.lojaUI.atualizarFavoritos();
     };
 
+    document.addEventListener("favoritos-changed", filtrarEMostrarProdutos);
     const adicionarAoCarrinho = (produtoId, productCard) => {
         if (productCard) animacaoVoarParaCarrinho(productCard);
         const produto = produtos.find((p) => p.id === produtoId);
@@ -274,6 +298,31 @@ document.addEventListener("DOMContentLoaded", async () => {
         atualizarCarrinho();
     };
 
+    const obterPagamentos = total => dividirPagamento(total,
+        document.querySelector('input[name="payment"]:checked').value,
+        document.getElementById('payment-split').checked,
+        document.getElementById('payment-second').value,
+        document.getElementById('payment-second-amount').value);
+    const atualizarPagamento = () => {
+        const dividir = document.getElementById('payment-split').checked;
+        document.getElementById('payment-split-area').hidden = !dividir;
+        document.getElementById('payment-split').setAttribute('aria-expanded', String(dividir));
+        const subtotal = carrinho.reduce((s, item) => s + item.preco * item.quantidade, 0);
+        const resultado = obterPagamentos(subtotal - calcularDesconto(subtotal));
+        document.getElementById('payment-split-feedback').textContent = dividir ? resultado.erro : '';
+        document.getElementById('payment-second-amount').setAttribute('aria-invalid', String(dividir && !!resultado.erro));
+        const resumo = document.getElementById('payment-split-summary');
+        resumo.replaceChildren();
+        if (dividir && !resultado.erro) resultado.pagamentos.forEach(p => {
+            const linha = document.createElement('p');
+            linha.textContent = `${p.forma}: ${formatarMoeda(p.valor)}`;
+            resumo.appendChild(linha);
+        });
+        const primeira = document.querySelector('input[name="payment"]:checked').value;
+        const segunda = document.getElementById('payment-second').value;
+        trocoContainer.style.display = primeira === 'Dinheiro' || (dividir && segunda === 'Dinheiro') ? 'block' : 'none';
+    };
+
     const atualizarCarrinho = () => {
         if (carrinho.length === 0) {
             cartBody.innerHTML = `<div class="cart-empty"><i class="fa-solid fa-box-open"></i><p>Seu carrinho está vazio.</p></div>`;
@@ -282,7 +331,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 .map(
                     (item) =>
                         `<div class="cart-item" data-id="${item.id}">
-                            <img src="${item.imagem}" alt="${item.nome}" class="cart-item-img">
+                            <img src="${escaparHTML(item.imagem)}" alt="${escaparHTML(item.nome)}" class="cart-item-img" loading="lazy" decoding="async">
                             <div class="cart-item-info">
                                 <h4 class="cart-item-name">${item.nome}</h4>
                                 <p class="cart-item-price">${formatarMoeda(item.preco)}</p>
@@ -329,6 +378,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             0,
         );
         finishOrderBtn.disabled = carrinho.length === 0;
+        atualizarPagamento();
 
         if (carrinho.length > 0 && window.innerWidth <= 768) {
             bannerTotalElem.textContent = formatarMoeda(total);
@@ -471,17 +521,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             const phone = document.getElementById("delivery-phone").value;
             const address = document.getElementById("delivery-address").value;
 
-            const paymentMethod = document.querySelector(
-                'input[name="payment"]:checked',
-            ).value;
-            let paymentInfo = `*Forma de Pagamento:* ${paymentMethod}`;
-            if (paymentMethod === "Dinheiro") {
-                const troco = document.getElementById("troco-para").value;
-                paymentInfo += troco
-                    ? ` (Troco para R$ ${troco})`
-                    : " (Não precisa de troco)";
-            }
-            mensagem += `*Tipo de Pedido:* Entrega\n\n*Nome:* ${nome}\n*Telefone:* ${phone}\n*Endereço:* ${address}\n\n${paymentInfo}`;
+            mensagem += `*Tipo de Pedido:* Entrega\n\n*Nome:* ${nome}\n*Telefone:* ${phone}\n*Endereço:* ${address}`;
         } else {
             const nome = document.getElementById("pickup-name").value;
             const dataInput = document.getElementById("pickup-date").value;
@@ -492,12 +532,32 @@ document.addEventListener("DOMContentLoaded", async () => {
             mensagem += `*Tipo de Pedido:* Retirada\n\n*Nome para Retirada:* ${nome}\n*Data Agendada:* ${dataFormatada}\n*Hora Agendada:* ${hora}`;
         }
 
+        const resultadoPagamento = obterPagamentos(total);
+        if (resultadoPagamento.erro) {
+            atualizarPagamento();
+            document.getElementById('payment-second-amount').focus();
+            alert(resultadoPagamento.erro);
+            return;
+        }
+        const pagamentos = resultadoPagamento.pagamentos;
+        let paymentInfo = pagamentos.length === 2
+            ? `*Pagamento em duas formas:*\n${pagamentos.map(p => `- ${p.forma}: ${formatarMoeda(p.valor)}`).join('\n')}`
+            : `*Forma de Pagamento:* ${pagamentos[0].forma}`;
+        if (pagamentos.some(p => p.forma === 'Dinheiro')) {
+            const troco = document.getElementById('troco-para').value;
+            paymentInfo += troco ? `\n*Troco para:* ${formatarMoeda(Number(troco))}` : '\n*Troco:* Não precisa de troco';
+        }
+        mensagem += `\n\n${paymentInfo}`;
         const url = `https://wa.me/${numeroWhatsApp}?text=${encodeURIComponent(mensagem)}`;
         window.open(url, "_blank");
     };
 
     // --- EVENT LISTENERS ---
     cartIcon.addEventListener("click", abrirCarrinho);
+    cartIcon.addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); abrirCarrinho(); }
+    });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') fecharCarrinho(); });
     closeCartBtn.addEventListener("click", fecharCarrinho);
     cartOverlay.addEventListener("click", fecharCarrinho);
     applyCouponBtn.addEventListener("click", applyCoupon);
@@ -567,14 +627,17 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     document.querySelectorAll('input[name="payment"]').forEach((radio) => {
         radio.addEventListener("change", (e) => {
-            trocoContainer.style.display =
-                e.target.value === "Dinheiro" ? "block" : "none";
+            atualizarPagamento();
             document
                 .querySelectorAll(".payment-option")
                 .forEach((label) => label.classList.remove("selected"));
             e.target.closest(".payment-option").classList.add("selected");
         });
     });
+
+    document.getElementById('payment-split').addEventListener('change', atualizarPagamento);
+    document.getElementById('payment-second').addEventListener('change', atualizarPagamento);
+    document.getElementById('payment-second-amount').addEventListener('input', atualizarPagamento);
 
     // Remove o erro ao digitar
     document
@@ -590,4 +653,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     // --- INICIALIZAÇÃO ---
     filtrarEMostrarProdutos();
     atualizarCarrinho();
+    const compartilhado = new URLSearchParams(location.search).get('produto');
+    if (compartilhado) {
+        const card = document.getElementById(`produto-${compartilhado}`);
+        if (card) {
+            card.classList.add('shared-product');
+            card.scrollIntoView({ block: 'center' });
+        } else if (!erroProdutos) window.lojaUI.notificar('Este produto não está disponível no catálogo.');
+    }
 });

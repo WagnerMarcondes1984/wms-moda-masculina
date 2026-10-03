@@ -3,8 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Admin – RA Moda Masculina</title>
+  <title>Admin – WMS Moda Masculina</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="./admin-extras.css">
   <style>
     :root {
       --bg:      #ffffff;
@@ -164,7 +165,7 @@
 <div id="login-screen">
   <div style="text-align:center">
     <img src="./assets/ra-sistema-logo.jpeg" alt="RA Sistemas" style="width:150px;max-width:70vw;margin-bottom:14px;border-radius:8px;display:inline-block">
-    <h1>RA Moda Masculina Admin</h1>
+    <h1>WMS Moda Masculina Admin</h1>
     <p style="margin-top:6px">Acesso restrito</p>
   </div>
   <div class="login-box">
@@ -185,7 +186,7 @@
 
 <div id="app">
   <div class="topbar">
-    <div class="topbar-brand"><i class="fa-solid fa-user-tie"></i> RA Moda Masculina Admin</div>
+    <div class="topbar-brand"><i class="fa-solid fa-user-tie"></i> WMS Moda Masculina Admin</div>
     <div class="topbar-right">
       <span style="font-size:.8rem;color:var(--muted)" id="topbar-count"></span>
       <button class="logout-btn" onclick="fazerLogout()"><i class="fa-solid fa-arrow-right-from-bracket"></i> Sair</button>
@@ -271,18 +272,19 @@
           </div>
           <div class="form-group">
             <label>Forma de pagamento</label>
-            <select id="pdv-pagamento">
+            <select id="pdv-pagamento" onchange="renderPdvCart()">
               <option value="dinheiro">Dinheiro</option>
               <option value="pix">Pix</option>
               <option value="debito">Cartão de débito</option>
               <option value="credito">Cartão de crédito</option>
             </select>
           </div>
-          <label class="toggle-row"><input type="checkbox" id="pdv-pagamento-dividir" onchange="pdvTogglePagamentoDividido()"> Dividir em 2 formas de pagamento</label>
+          <label class="toggle-row pdv-split-toggle" for="pdv-pagamento-dividir"><input type="checkbox" id="pdv-pagamento-dividir" aria-controls="pdv-pagamento2-area" aria-expanded="false" onchange="pdvTogglePagamentoDividido()"> Pagar com duas formas (ex.: PIX + cartão)</label>
           <div id="pdv-pagamento2-area" style="display:none;flex-direction:column;gap:12px">
+            <p class="pdv-payment-help">Informe o valor na segunda forma. O restante será calculado para a primeira.</p>
             <div class="form-group">
               <label>2ª forma de pagamento</label>
-              <select id="pdv-pagamento2">
+              <select id="pdv-pagamento2" onchange="renderPdvCart()">
                 <option value="dinheiro">Dinheiro</option>
                 <option value="pix">Pix</option>
                 <option value="debito">Cartão de débito</option>
@@ -302,7 +304,9 @@
           <div class="pdv-totals-row"><span>Desconto</span><span id="pdv-desconto-total">R$ 0,00</span></div>
           <div class="pdv-totals-row total"><span>Total</span><span id="pdv-total">R$ 0,00</span></div>
           <div id="pdv-split-resumo" style="display:none;flex-direction:column;gap:4px"></div>
-          <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="pdvFinalizarVenda()"><i class="fa-solid fa-check"></i> Finalizar Venda</button>
+          <button class="btn btn-primary" style="width:100%;justify-content:center" id="pdv-finalizar-btn" onclick="pdvFinalizarVenda()"><i class="fa-solid fa-check"></i> Finalizar Venda</button>
+          <button id="imprimir-ultima-venda" class="btn btn-ghost" style="width:100%;justify-content:center;margin-top:8px" disabled><i class="fa-solid fa-print"></i> Imprimir última venda</button>
+          <div class="pdv-shortcuts" aria-label="Atalhos do PDV"><span><kbd>F2</kbd> Buscar</span><span><kbd>F4</kbd> Cupom</span><span><kbd>F8</kbd> Finalizar</span><span><kbd>F9</kbd> Recibo</span></div>
           <button class="btn btn-ghost" style="width:100%;justify-content:center" onclick="pdvLimparCarrinho()"><i class="fa-solid fa-eraser"></i> Limpar carrinho</button>
         </div>
       </div>
@@ -320,12 +324,14 @@
     <div id="tab-relatorio" class="tab-panel">
       <div class="toolbar">
         <input type="month" id="relatorio-mes" onchange="carregarRelatorio()">
+        <button id="exportar-csv" class="btn btn-ghost" disabled><i class="fa-solid fa-file-csv"></i> Exportar CSV</button>
       </div>
       <div class="stats-row">
         <div class="stat-card"><div class="num" id="relatorio-stat-qtd">–</div><div class="lbl">Vendas no mês</div></div>
         <div class="stat-card"><div class="num" id="relatorio-stat-total">–</div><div class="lbl">Faturamento no mês</div></div>
         <div class="stat-card"><div class="num" id="relatorio-stat-ticket">–</div><div class="lbl">Ticket médio</div></div>
       </div>
+      <div class="report-chart"><h3>Vendas por dia</h3><p id="grafico-status" role="status">Selecione um mês para consultar as vendas.</p><div class="chart-container"><canvas id="relatorio-grafico" role="img" aria-label="Gráfico de faturamento por dia; os dados também estão na tabela de vendas."></canvas></div></div>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Data</th><th>Hora</th><th>Cliente</th><th>Itens</th><th>Pagamento</th><th>Total</th><th>Ações</th></tr></thead>
@@ -338,7 +344,7 @@
       <div class="form-grid" style="max-width:640px">
         <div class="form-group full">
           <label>Nome da loja</label>
-          <input type="text" id="config-nome-loja" placeholder="Ex: RA Moda Masculina">
+          <input type="text" id="config-nome-loja" placeholder="Ex: WMS Moda Masculina">
         </div>
         <div class="form-group full">
           <label>WhatsApp para receber pedidos <small style="color:var(--muted)">(DDI + DDD + número, só números, ex: 5581999999999)</small></label>
@@ -532,11 +538,13 @@
 </div>
 
 <div id="toast"></div>
+<section id="recibo-impressao" aria-label="Recibo de venda"></section>
 
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="./firebase-config.js"></script>
+<script src="./payment-split.js"></script>
 
 <script>
 firebase.initializeApp(firebaseConfig);
@@ -565,6 +573,10 @@ auth.onAuthStateChanged(user => {
   } else {
     document.getElementById("login-screen").style.display = "flex";
     document.getElementById("app").style.display = "none";
+    window.painelExtras?.limparSessao();
+    vendasHoje = [];
+    vendasRelatorio = [];
+    pdvLimparCarrinho();
   }
 });
 
@@ -1055,6 +1067,7 @@ function pdvLimparCarrinho() {
 function pdvTogglePagamentoDividido() {
   const dividir = document.getElementById("pdv-pagamento-dividir").checked;
   document.getElementById("pdv-pagamento2-area").style.display = dividir ? "flex" : "none";
+  document.getElementById("pdv-pagamento-dividir").setAttribute("aria-expanded", String(dividir));
   renderPdvCart();
 }
 
@@ -1075,16 +1088,14 @@ function pdvCalcularDesconto(subtotal) {
 
 const PAG_LABEL = { dinheiro: "Dinheiro", pix: "Pix", debito: "Débito", credito: "Crédito" };
 
-function pdvCalcularPagamentos(total) {
-  const dividir = document.getElementById("pdv-pagamento-dividir").checked;
-  const forma1  = document.getElementById("pdv-pagamento").value;
-  if (!dividir) return [{ forma: forma1, valor: total }];
-  const forma2 = document.getElementById("pdv-pagamento2").value;
-  let valor2   = parseFloat(document.getElementById("pdv-valor-pagamento2").value) || 0;
-  valor2 = Math.max(0, Math.min(valor2, total));
-  const valor1 = total - valor2;
-  return [{ forma: forma1, valor: valor1 }, { forma: forma2, valor: valor2 }];
+function pdvObterPagamentos(total) {
+  return dividirPagamento(total, document.getElementById("pdv-pagamento").value,
+    document.getElementById("pdv-pagamento-dividir").checked,
+    document.getElementById("pdv-pagamento2").value,
+    document.getElementById("pdv-valor-pagamento2").value);
 }
+
+function pdvCalcularPagamentos(total) { return pdvObterPagamentos(total).pagamentos; }
 
 function renderPdvCart() {
   const cont = document.getElementById("pdv-cart-items");
@@ -1115,9 +1126,10 @@ function renderPdvCart() {
 
   const resumo = document.getElementById("pdv-split-resumo");
   if (document.getElementById("pdv-pagamento-dividir").checked) {
-    const pags = pdvCalcularPagamentos(total);
+    const resultado = pdvObterPagamentos(total);
+    const pags = resultado.pagamentos;
     resumo.style.display = "flex";
-    resumo.innerHTML = pags.map(p => `
+    resumo.innerHTML = resultado.erro ? `<p class="pdv-payment-help">${resultado.erro}</p>` : pags.map(p => `
       <div class="pdv-totals-row"><span>${PAG_LABEL[p.forma] || p.forma}</span><span>R$ ${p.valor.toFixed(2).replace('.',',')}</span></div>
     `).join("");
   } else {
@@ -1141,12 +1153,16 @@ function pdvAplicarCupom() {
   renderPdvCart();
 }
 
+let pdvGravando = false;
 async function pdvFinalizarVenda() {
+  if (pdvGravando) return;
   if (!pdvCarrinho.length) { toast("Adicione ao menos um produto ao carrinho.", "err"); return; }
   const subtotal   = pdvCalcularSubtotal();
   const desconto   = pdvCalcularDesconto(subtotal);
   const total      = subtotal - desconto;
-  const pagamentos = pdvCalcularPagamentos(total);
+  const resultadoPagamento = pdvObterPagamentos(total);
+  if (resultadoPagamento.erro) { toast(resultadoPagamento.erro, "err"); return; }
+  const pagamentos = resultadoPagamento.pagamentos;
   const cliente    = document.getElementById("pdv-cliente").value.trim();
 
   if (pagamentos.length > 1 && (pagamentos[0].valor <= 0 || pagamentos[1].valor <= 0)) {
@@ -1165,11 +1181,22 @@ async function pdvFinalizarVenda() {
   };
 
   try {
-    await db.collection("vendas").add(venda);
+    pdvGravando = true;
+    document.getElementById('pdv-finalizar-btn').disabled = true;
+    const vendaRef = await db.collection("vendas").add(venda);
+    const dataRecibo = new Date();
+    const recibo = { ...venda, docId: vendaRef.id, criadoEm: { toDate: () => dataRecibo } };
+    window.painelExtras?.registrarUltimaVenda(recibo);
     toast("Venda finalizada com sucesso!", "ok");
     pdvLimparCarrinho();
     await carregarVendasHoje();
+    const registrada = vendasHoje.find(v => v.docId === vendaRef.id);
+    if (registrada) window.painelExtras?.registrarUltimaVenda(registrada);
   } catch(e) { toast("Erro ao finalizar venda: " + e.message, "err"); }
+  finally {
+    pdvGravando = false;
+    document.getElementById('pdv-finalizar-btn').disabled = false;
+  }
 }
 
 async function carregarVendasHoje() {
@@ -1204,7 +1231,7 @@ function linhaVenda(v, origem, comData) {
       <td style="max-width:260px"><span style="font-size:.8rem;color:var(--muted)">${itensResumo}</span></td>
       <td><span style="font-size:.8rem">${pagamentoTexto}</span></td>
       <td style="font-weight:700;color:var(--gold)">R$ ${Number(v.total||0).toFixed(2).replace('.',',')}</td>
-      <td><button class="btn btn-danger btn-sm" onclick="confirmarExclusaoVenda('${v.docId}','${origem}')" title="Excluir venda"><i class="fa-solid fa-trash"></i></button></td>
+      <td><button class="btn btn-ghost btn-sm" onclick="imprimirVenda('${v.docId}')" title="Imprimir recibo" aria-label="Imprimir recibo"><i class="fa-solid fa-print"></i></button> <button class="btn btn-danger btn-sm" onclick="confirmarExclusaoVenda('${v.docId}','${origem}')" title="Excluir venda"><i class="fa-solid fa-trash"></i></button></td>
     </tr>`;
 }
 
@@ -1235,7 +1262,12 @@ function confirmarExclusaoVenda(docId, origem) {
 }
 
 // ── RELATÓRIO ─────────────────────────────────────────────────────────────
+let relatorioConsulta = 0;
 async function carregarRelatorio() {
+  const consulta = ++relatorioConsulta;
+  window.painelExtras?.prepararRelatorio(false);
+  document.getElementById('relatorio-tabela').innerHTML = '<tr><td colspan="7"><div class="loader">Carregando relatório…</div></td></tr>';
+  for (const id of ['relatorio-stat-qtd', 'relatorio-stat-total', 'relatorio-stat-ticket']) document.getElementById(id).textContent = '—';
   try {
     const mesStr = document.getElementById("relatorio-mes").value || mesAtualStr();
     const [ano, mes] = mesStr.split("-").map(Number);
@@ -1246,15 +1278,21 @@ async function carregarRelatorio() {
       .where("criadoEm", "<", fim)
       .orderBy("criadoEm", "desc")
       .get();
+    if (consulta !== relatorioConsulta || !auth.currentUser) return;
     vendasRelatorio = snap.docs.map(d => ({ docId: d.id, ...d.data() }));
+    window.painelExtras?.prepararRelatorio(true);
     renderRelatorio();
   } catch(e) {
+    if (consulta !== relatorioConsulta || !auth.currentUser) return;
+    vendasRelatorio = [];
+    window.painelExtras?.falhaRelatorio();
     document.getElementById("relatorio-tabela").innerHTML =
       `<tr><td colspan="7"><div class="empty-state"><i class="fa-solid fa-triangle-exclamation"></i><p>Erro ao carregar relatório: ${e.message}</p></div></td></tr>`;
   }
 }
 
 function renderRelatorio() {
+  window.painelExtras?.renderGrafico();
   const totalMes = vendasRelatorio.reduce((s,v) => s + Number(v.total||0), 0);
   document.getElementById("relatorio-stat-qtd").textContent   = vendasRelatorio.length;
   document.getElementById("relatorio-stat-total").textContent = "R$ " + totalMes.toFixed(2).replace('.',',');
@@ -1270,7 +1308,7 @@ function renderRelatorio() {
 
 // ── CONFIGURAÇÕES ─────────────────────────────────────────────────────────
 const CONFIG_PADRAO = {
-  nomeLoja: "RA Moda Masculina",
+  nomeLoja: "WMS Moda Masculina",
   whatsapp: "558182362638",
   retiradaDias: [0,1,2,3,4,5,6],
   retiradaHoraInicio: "08:00",
@@ -1379,5 +1417,7 @@ function toast(msg, tipo = "ok") {
 // ── AUTO-INIT ─────────────────────────────────────────────────────────────
 if (sessionStorage.getItem("admin_ok") === "1") inicializar();
 </script>
+<script async id="chart-cdn" src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+<script defer src="./admin-extras.js"></script>
 </body>
 </html>

@@ -1,0 +1,16 @@
+{
+  "id": "./",
+  "name": "WMS Moda Masculina",
+  "short_name": "WMS Moda",
+  "lang": "pt-BR",
+  "description": "Catálogo de moda masculina e pedidos pelo WhatsApp.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#F5F7FB",
+  "theme_color": "#0F172A",
+  "icons": [
+    { "src": "assets/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}
